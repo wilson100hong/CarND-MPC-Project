@@ -41,6 +41,15 @@ size_t epsi_start   = cte_start + N;
 size_t delta_start  = epsi_start + N;
 size_t a_start      = delta_start + N - 1;
 
+double kCTE = 600;
+double kEPSI = 600;
+double kRefV = 1.0;
+double kDelta = 1.0;
+double kA = 1.0;
+double kDeltaCrossA = 300;
+double kSeqDelta = 800;
+double kSeqA = 50;
+
 class FG_eval {
  public:
   // Fitted polynomial coefficients
@@ -58,26 +67,23 @@ class FG_eval {
     
     // The part of the cost based on the reference state.
     for (int t = 0; t < N; ++t) {
-      // TODO: tune
-      fg[0] += 400*CppAD::pow(vars[cte_start + t], 2);
-      fg[0] += 600*CppAD::pow(vars[epsi_start + t], 2);
-      fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
+      fg[0] += kCTE * CppAD::pow(vars[cte_start + t], 2);
+      fg[0] += kEPSI * CppAD::pow(vars[epsi_start + t], 2);
+      fg[0] += kRefV * CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Minimize the use of actuators.
     for (int t = 0; t < N - 1; ++t) {
-      // TODO: factor
-      fg[0] += CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t], 2);
+      fg[0] += kDelta * CppAD::pow(vars[delta_start + t], 2);
+      fg[0] += kA * CppAD::pow(vars[a_start + t], 2);
       // try adding penalty for speed + steer
-      fg[0] += 300*CppAD::pow(vars[delta_start + t] * vars[v_start+t], 2);
+      fg[0] += kDeltaCrossA * CppAD::pow(vars[delta_start + t] * vars[v_start+t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; ++t) {
-      // TODO: factor
-      fg[0] += 600*CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += 10*CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += kSeqDelta * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += kSeqA * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     // 
@@ -134,7 +140,6 @@ class FG_eval {
       // v_[t+1] = v[t] + a[t] * dt
       // cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
       // epsi[t+1] = psi[t] - psides[t] - v[t] * delta[t] / Lf * dt
-
       fg[1 + x_start + t]    = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + y_start + t]    = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
       fg[1 + psi_start + t]  = psi1 - (psi0 - v0 * delta / Lf * dt);
@@ -164,10 +169,10 @@ std::vector<double> MPC::Solve(const VectorXd &state, const VectorXd &coeffs) {
    */
   size_t n_constraints = 6*N;
 
-  double x     = state[0];  // m
-  double y     = state[1];  // m
-  double psi   = state[2];  // rad
-  double v     = state[3];  // m/s
+  double x     = state[0];
+  double y     = state[1];
+  double psi   = state[2];
+  double v     = state[3];
   double cte   = state[4];
   double epsi  = state[5];
   double delta = state[6];
@@ -266,7 +271,6 @@ std::vector<double> MPC::Solve(const VectorXd &state, const VectorXd &coeffs) {
 
   // Cost
   auto cost = solution.obj_value;
-  // std::cout << "Cost " << cost << std::endl;
 
   /**
    * Return the first actuator values. The variables can be accessed with

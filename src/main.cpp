@@ -12,7 +12,7 @@
 #include "json.hpp"
 #include "MPC.h"
 
-// for convenience
+// For convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
@@ -39,7 +39,6 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    // std::cout << sdata << std::endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -82,9 +81,7 @@ int main() {
           // x, y, psi, v, cte, epsi, steer and throttle.
           Eigen::VectorXd state(6 + 2);
           state << 0, 0, 0, v, cte, epsi, steer_value, throttle_value;
-          //std::cout << "state: " << state << std::endl;
-
-
+          
           vector<double> result = mpc.Solve(state, coeffs);
           steer_value = result[0];
           throttle_value = result[1];
@@ -108,7 +105,6 @@ int main() {
           for (int i=2; i<result.size(); i+=2) {
             mpc_x_vals.push_back(result[i]);
             mpc_y_vals.push_back(result[i+1]);
-            //std::cout << "mpc_x: " << ans[i] << ", mpc_y: " << ans[i+1] << std::endl;
           }
 
           msgJson["mpc_x"] = mpc_x_vals;
@@ -131,9 +127,8 @@ int main() {
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
-
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+
           // Latency
           // The purpose is to mimic real driving conditions where
           //   the car does actuate the commands instantly.

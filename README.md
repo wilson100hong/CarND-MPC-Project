@@ -3,6 +3,11 @@ Self-Driving Car Engineer Nanodegree Program
 
 ---
 
+[//]: # (Image References)
+
+[image1]: ./images/update_eq.png "Update equation"
+[image2]: ./images/youtube.png "Youtube"
+---
 ## Dependencies
 
 * cmake >= 3.5
@@ -25,12 +30,6 @@ Self-Driving Car Engineer Nanodegree Program
     ```
     Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
 
-* **Ipopt and CppAD:** Please refer to [this document](https://github.com/udacity/CarND-MPC-Project/blob/master/install_Ipopt_CppAD.md) for installation instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
-
-
 ## Basic Build Instructions
 
 1. Clone this repo.
@@ -38,79 +37,94 @@ Self-Driving Car Engineer Nanodegree Program
 3. Compile: `cmake .. && make`
 4. Run it: `./mpc`.
 
-## Build with Docker-Compose
-The docker-compose can run the project into a container
-and exposes the port required by the simulator to run.
+## Project Rubrics
 
-1. Clone this repo.
-2. Build image: `docker-compose build`
-3. Run Container: `docker-compose up`
-4. On code changes repeat steps 2 and 3.
+### The Model
+I use MPC model with the following states (all in vehicle coordinate system):
+  - `x`: Car position x 
+  - `y`: Car position y
+  - `psi`: Car heading
+  - `v`: Car velocity
+  - `cte`: Cross track error; the error of position y from reference line.
+  - `epsi`: Orientation error.
 
-## Tips
+The actuators are steering and throttle, which maps to `delta` and `a`.
 
-1. The MPC is recommended to be tested on examples to see if implementation behaves as desired. One possible example
-is the vehicle offset of a straight line (reference). If the MPC implementation is correct, it tracks the reference line after some timesteps(not too many).
-2. The `lake_track_waypoints.csv` file has waypoints of the lake track. This could fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.)
-4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
-5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
+The update equations is based on course material with slight modification: since in simulator the steering angle is in the opposite direction to the car heading, the equation negates the "delta" part (with red circle).
 
-## Editor Settings
+![Screenshot][image1]
 
-We have kept editor configuration files out of this repo to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+### Timestep Length and Elapsed Duration (N & dt)
+I have tried different combinations of N and dt separately. I first experiment dt in range [0.01, 0.5] with step 0.01. It turns out dt=0.1 gives me the best simulation result. Other dt values makes the car swing dramatically and instable.
 
-## Code Style
+I also experiement different values of N. Since N cannot be to small (otherwise the horizon is too short) neither too large (seems acutation errors will accumulte). I pick range of N in [5, 20]. It turns out N=10 gives me acceptable result.
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+The final decision is `N=10`, `dt=0.1`.
 
-## Project Instructions and Rubric
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+### Polynomial Fitting and MPC Preprocessing
+Polynomial fitting is done by the following steps (`MPC.cpp` line 58 ~ 76)
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
+1. Convert simulator message's `ptsx` and `ptsy` from world coordinate system to vehicle coodinate system. This is done by:
+    - Transit by `(-px, -py)`
+    - Rotate by `-psi`
+2. Truncate the waypoints since we only need to fit adequate lengths of reference line. In this case, since we use N=10 and dt=0.1, a reference line of future 1 second movement is enough. So I truncate waypoints by `MAX_POLY_FIT_NUM=10` (1 second / 100ms).
 
-## Hints!
+3. Fit truncated waypoints with polynomial order=`3`
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
 
-## Call for IDE Profiles Pull Requests
+### Model Predictive Control with Latency
+The latency is handled by using "delayed acutations" in model updating (`MPC.cpp` line 111~117). The idea is let the model update happens at T<sub>i</sub> uses the actuation at T<sub>i-1-n_delay</sub> instead of T<sub>i-1</sub> to mimic the latency in acutation.
 
-Help your fellow students!
+`n_delay` is the additional delay, computed by `latency/dt`. In this project,n_delay=1 (0.1/0.1).
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. We omitted IDE profiles to ensure
-students don't feel pressured to use one IDE or another.
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+### Parameter tuning.
+The most time consuming part is to tune parameters used in cost function. The Cost function is composed by several parts, each part has a corresponding parameter to address the criticalness in penalizing the optimizer to achieve desiered behaviors.
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
+- cte (kCTE) 
+- epsi (kEPSI)
+- speed reference (kRefV)
+- steering (kDelta) 
+- throttle (kA)
+- steering times throttle (kDeltaCrossA) 
+- sequental change of steering (kSeqDelta)
+- sequential change of throttle (kSeqA)
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. Most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
+Here I describe my tuning process:
 
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+1. I started with all paramters = 1.0. The car immediate goes out of track at the beginning straight track.
 
-## How to write a README
-A well written README file can enhance your project and portfolio and develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+2. To keep car in track, I found that increase the `kEPSI` gives the best result. By suing kEPSI=100 the car can finish the lap.
+
+3. However, at sharp turns or sequential turns (s-curve), the car sometimes will ride on curb (but can recover it). This means the car does not honor reference line in such situation. So I increase the value of `kCTE`. Increasing kCTE will force the car tends to stay on reference line, however, it will cause overdamping.
+
+4. To reduce overdamping, I need to penalize the car when its heading changes too aggresively, so I increase `kEPSI` and also `kSeqDelta`. I found an empirical rule: when KCTE increase, kEPSI and kSeqDelta also needs to be increased to keep the car stable.
+
+5. Morever, I found increase `kDeltaCrossA` further helps the car to stay on renference line in sharp turn: because it will try to do brake when the speed is high at sharp turn. It figures out to lower the speed to avoid too large steering! However, the car tends to brake too much (from 60 mph to 15mph).
+
+6. The rest I tuned is to increase `kSeqA` to keep the car not doing aggresive breaking at sharp turn. Now the car can pass sharp turns at 25+ mph.
+
+7. Final parameters:
+
+    | Params   | Value |
+    |----------|-------|
+    | kCTE     | 600    |
+    | kEPSI    | 600    |
+    | kRefV    | 1    |
+    | kDelta   | 1 |
+    | kA       | 1 |
+    | kDeltaCrossA  | 300 |
+    | kSeqDelta | 800 |
+    | kSeqA    | 50 |
+
+
+
+### The vehicle must successfully drive a lap around the track.
+The simulation result shows the vehicle is stayed on drivable area. At some sharp turns it will infringe the curb lanes but still keep on track.
+
+[YouTube video](https://www.youtube.com/watch?v=-QoZ7TFy0Rs)
+
+![Screenshot][image2]
